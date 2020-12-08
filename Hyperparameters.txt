@@ -1,0 +1,8 @@
+Batch Size 128
+Learning Rate 0.0003, Reduce to 0.00025 after 3000 iterations
+Entropy 0.01, increase to 0.1 as the color of the actual track is quite different
+Epoch 5
+Experience episodes 60
+Loss type Huber
+Others Default
+

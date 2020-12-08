@@ -1,0 +1,114 @@
+import math
+
+##Checks if the point is on track
+def check_on_track(point, waypoints, next_idx, max_dist_from_center, total_wp):
+    for i in range(10):
+        wp_idx = (next_idx + i) % total_wp
+        wp = waypoints[wp_idx]
+        if ((wp[0] - point[0])**2 + (wp[1] - point[1])**2)**0.5 < max_dist_from_center:
+            return True
+    return False
+
+##Projects a future point a certain distance away from current position
+def calc_point(curr_point, angle, distance):
+    x = curr_point[0] + (distance * math.cos(math.radians(angle)))
+    y = curr_point[1] + (distance * math.sin(math.radians(angle)))
+    return [x,y]
+
+##Provides functions that allow calculation of distance
+class Distance:
+    prev_wp = [0,0]
+    prev_loc = [0,0]
+    rewards = [1,1,1,1,1]
+    def get_reward_factor(self, reward):
+        self.rewards.pop(0)
+        self.rewards.append(reward)
+        return sum(self.rewards)/5
+    def set_prev_wp(self, wp):
+        self.prev_wp = wp
+    def set_prev_loc(self, loc):
+        self.prev_loc = loc
+    def get_prev_loc(self):
+        return self.prev_loc
+    def get_prev_wp(self):
+        return self.prev_wp 
+    def get_dist(self, p1, p2):
+        return (((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)**0.5)
+    def calc_point(self, p1, p2, r):
+        return [p1[0]+r*(p2[0]-p1[0]),p1[1]+r*(p2[1]-p1[1])]
+
+d = Distance()
+
+##Reward Function
+def reward_function(params):
+    all_wheels_on_track = params['all_wheels_on_track']
+    speed = params['speed']
+    steer = params['steering_angle']
+    heading = params['heading']
+    track_width = params['track_width']
+    waypoints = params['waypoints']
+    closest_waypoints = params['closest_waypoints']
+    prev_idx, next_idx = closest_waypoints[0], closest_waypoints[1]
+    x = params['x']
+    y = params['y']
+    steps = params['steps']
+
+    reward = 1e-3
+    ##If off track, negative reward
+    if not (all_wheels_on_track):
+        return float(-1)
+    else:
+        reward = reward + 1
+
+    ##If not in specified action space, negative reward
+    ##Idea is to reduce action space and make it train faster
+    if (speed == 4 and abs(steer) > 12) or (speed == 1.33 and abs(steer) != 24) or (speed == 2.67 and abs(steer) < 12):
+        return float(-1)
+    else:
+        reward = reward + 1
+
+    ##Initializing the previous points to benchmark shortest distance against    
+    if steps == 1:
+        d.set_prev_loc(waypoints[prev_idx])
+        d.set_prev_wp(waypoints[prev_idx])
+
+    ##Based on current speed and heading, next step should be on track. 
+    ##Prevents car from taking stupid directions
+    rc_count = 0
+    for i in range(round(speed)):
+        p_point = calc_point([x,y], heading, (0.1 * (i+1)))
+        racing_line = check_on_track(p_point, waypoints, next_idx, track_width/2, len(waypoints))
+        if racing_line:
+            rc_count = rc_count + 1
+        else:
+            break
+
+    ##checking if the car indeed will stay on track on the next step and rewarding that step
+    if rc_count == round(speed):
+        reward = reward + 1
+    else:
+        return float(-1)
+
+    ##checking distance from previous and next waypoints
+    d1 = d.get_dist([x,y], waypoints[prev_idx])
+    d2 = d.get_dist([x,y], waypoints[next_idx])
+    
+    ##Computing the ratio between the distance from previous waypoint and the total distance between two waypoints
+    r = d1/(d1+ d2 + 1e-6)
+    
+    ##Use the ratio to project the current car location onto line between previous and current waypoint
+    calc_wp = d.calc_point(waypoints[prev_idx], waypoints[next_idx], r) ## TODO: waypoints[prev_idx] should be replaced by d.get_prev_wp()?
+    
+    ##checking traveled distance vs distance from prev wp to new wp
+    dist_center_line = d.get_dist(calc_wp, d.get_prev_wp())
+    dist_traveled = d.get_dist([x,y], d.get_prev_loc())
+    
+    ##Creating a factor of speed
+    shortest_distance_factor = round(4/speed) * 20
+
+    ##Calculating the gain of shortest distance and feeding it to reward calculations (based on speed)
+    reward_factor = d.get_reward_factor(1 + (dist_center_line - dist_traveled)*shortest_distance_factor)
+    reward = reward_factor * speed/4
+    d.set_prev_wp(calc_wp)
+    d.set_prev_loc([x,y])
+    return reward

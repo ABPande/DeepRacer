@@ -97,8 +97,9 @@ def reward_function(params):
     r = d1/(d1+ d2 + 1e-6)
     
     ##Use the ratio to project the current car location onto line between previous and current waypoint
-    calc_wp = d.calc_point(waypoints[prev_idx], waypoints[next_idx], r) ## TODO: waypoints[prev_idx] should be replaced by d.get_prev_wp()?
-    
+    ##calc_wp = d.calc_point(waypoints[prev_idx], waypoints[next_idx], r) ## TODO: waypoints[prev_idx] should be replaced by d.get_prev_wp()?
+    calc_wp = d.calc_point(d.get_prev_wp(), waypoints[next_idx], r)    
+
     ##checking traveled distance vs distance from prev wp to new wp
     dist_center_line = d.get_dist(calc_wp, d.get_prev_wp())
     dist_traveled = d.get_dist([x,y], d.get_prev_loc())
